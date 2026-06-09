@@ -1,3 +1,6 @@
+import gevent.monkey
+gevent.moneky.patch_all()
+
 from flask import Flask, request, session, jsonify
 from flask_socketio import SocketIO, emit
 from google import genai

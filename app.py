@@ -174,4 +174,5 @@ def handle_disconnect():
 
 # Inicia o servidor local. A porta padrão do Flask costuma ser a 5000.
 if __name__ == "__main__":
-    socketio.run(app)
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host="0.0.0.0", port=port)

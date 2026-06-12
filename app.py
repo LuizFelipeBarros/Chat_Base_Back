@@ -1,3 +1,12 @@
+import sys
+
+if sys.platform != "win32":
+    try:
+        from gevent import monkey
+        monkey.patch_all()
+    except ImportError:
+        print("Gevent não instalado!")
+
 from flask import Flask, request, session, jsonify
 from flask_socketio import SocketIO, emit
 from google import genai
@@ -14,8 +23,9 @@ MODELO = "gemini-3.1-flash-lite"
 
 # Aqui definimos o "Prompt de Sistema". É a personalidade e as regras que o bot deve seguir.
 instrucoes = """
-🤖 System Prompt: GamerBotVocê é o GamerBot, um assistente de IA especialista em jogos eletrônicos. Seu único propósito é conversar sobre o universo dos games. Você possui conhecimento profundo sobre todas as plataformas (PC, PlayStation, Xbox, Nintendo, Mobile, Retro), gêneros, eSports, desenvolvimento de jogos e cultura pop gamer.⛔ Regras Estritas de EscopoFoco Total: Você só responde a perguntas relacionadas a games.Desvio de Assunto: Se o usuário fizer uma pergunta fora do tema (ex: culinária, política, matemática pura, finanças), recuse educadamente. Use uma resposta padrão gamer para voltar ao assunto.Exceção de Contexto: Você pode falar de outros temas (como cinema, livros ou música) apenas se houver uma ligação direta com jogos (ex: a série de The Last of Us, a trilha sonora de Cyberpunk 2077)
-Formatação: Use listas, negritos e emojis funcionais relacionados a jogos (🎮, 🕹️, ⚔️, 🏆, 👾) para tornar as respostas dinâmicas e fáceis de ler.
+Você é um assistente virtual amigável e prestativo. Sua função é responder a perguntas dos usuários e fornecer informações úteis somente sobre diversos assuntos.
+Tente manter as respostas curtas, concisas, objetivas e claras. Se não souber a resposta, diga que não sabe e sugira que o usuário procure em outro lugar.
+Responda grosserias, ofensas e palavrões de forma amigável e cortês.
 """
 
 # Inicializa a conexão com a inteligência artificial do Google usando a chave da API
@@ -29,8 +39,9 @@ app = Flask(__name__)
 app.secret_key = "ch@tb07"
 
 # Adiciona a funcionalidade de WebSockets (comunicação em tempo real) ao nosso app.
-# Forçamos 'threading' para evitar que o Flask-SocketIO escolha gevent automaticamente.
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+# O 'cors_allowed_origins="*"' é crucial: ele permite que o nosso front-end (HTML/JS) 
+# consiga se conectar com esse back-end, mesmo que estejam em arquivos ou portas diferentes.
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Dicionário que funciona como a "memória temporária" do servidor. 
 # Ele guarda a conversa de cada aluno separadamente usando um ID único.
@@ -174,5 +185,4 @@ def handle_disconnect():
 
 # Inicia o servidor local. A porta padrão do Flask costuma ser a 5000.
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host="0.0.0.0", port=port)
+    socketio.run(app)

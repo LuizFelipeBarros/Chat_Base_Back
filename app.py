@@ -36,25 +36,6 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 # Ele guarda a conversa de cada aluno separadamente usando um ID único.
 active_chats = {}
 
-
-def ensure_session_id():
-    """Garante que a sessão Flask exista antes de qualquer operação de chat."""
-    if 'session_id' not in session:
-        session['session_id'] = str(uuid4())
-        print(f"Nova sessão Flask criada: {session['session_id']}")
-
-
-def create_gemini_chat(session_id):
-    """Cria e armazena uma sessão nova do Gemini para o usuário."""
-    print(f"Criando novo chat Gemini para session_id: {session_id}")
-    chat_session = client.chats.create(
-        model=MODELO,
-        config=types.GenerateContentConfig(system_instruction=instrucoes)
-    )
-    active_chats[session_id] = chat_session
-    print(f"Novo chat Gemini criado e armazenado para {session_id}")
-    return chat_session
-
 def get_user_chat():
     """
     Função principal de gerenciamento de usuários.
@@ -64,13 +45,24 @@ def get_user_chat():
     
     # Passo 1: Se o usuário é novo (não tem um 'session_id'), criamos um ID único para ele.
     # Usamos o 'uuid4' para gerar um código aleatório impossível de repetir.
-    ensure_session_id()
+    if 'session_id' not in session:
+        session['session_id'] = str(uuid4())
+        print(f"Nova sessão Flask criada: {session['session_id']}")
+
     session_id = session['session_id']
 
     # Passo 2: Se o usuário já tem um ID, mas ainda não tem uma conversa aberta com o Gemini...
     if session_id not in active_chats:
+        print(f"Criando novo chat Gemini para session_id: {session_id}")
         try:
-            return create_gemini_chat(session_id)
+            # ...nós criamos uma nova conversa e passamos as instruções (personalidade).
+            chat_session = client.chats.create(
+                model=MODELO,
+                config=types.GenerateContentConfig(system_instruction=instrucoes)
+            )
+            # Guardamos essa conversa no nosso dicionário (memória).
+            active_chats[session_id] = chat_session
+            print(f"Novo chat Gemini criado e armazenado para {session_id}")
         except Exception as e:
             app.logger.error(f"Erro ao criar chat Gemini para {session_id}: {e}", exc_info=True)
             raise  # Se der erro aqui, repassa para o sistema avisar que falhou
@@ -80,7 +72,11 @@ def get_user_chat():
     if session_id in active_chats and active_chats[session_id] is None:
         print(f"Recriando chat Gemini para session_id existente (estava None): {session_id}")
         try:
-            return create_gemini_chat(session_id)
+            chat_session = client.chats.create(
+                model=MODELO,
+                config=types.GenerateContentConfig(system_instruction=instrucoes)
+            )
+            active_chats[session_id] = chat_session
         except Exception as e:
             app.logger.error(f"Erro ao recriar chat Gemini para {session_id}: {e}", exc_info=True)
             raise
@@ -110,7 +106,8 @@ def handle_connect():
     print(f"Cliente conectado: {request.sid}")
     
     try:
-        ensure_session_id()
+        # Tenta criar a pasta do usuário assim que ele entra
+        get_user_chat()
         user_session_id = session.get('session_id', 'N/A')
         print(f"Sessão Flask para {request.sid} usa session_id: {user_session_id}")
         
@@ -151,13 +148,11 @@ def handle_enviar_mensagem(data):
 
         # ... e aqui extraímos apenas o texto da resposta que o Gemini devolveu.
         # (O 'if/else' garante que vamos achar o texto independente de como a API estruturar a resposta)
-        resposta_texto = getattr(resposta_gemini, 'text', None)
-        if not resposta_texto:
-            candidatos = getattr(resposta_gemini, 'candidates', [])
-            if candidatos and candidatos[0].content and candidatos[0].content.parts:
-                resposta_texto = candidatos[0].content.parts[0].text
-            else:
-                resposta_texto = "🎮 Não consegui gerar uma resposta agora. Tente novamente em instantes."
+        resposta_texto = (
+            resposta_gemini.text
+            if hasattr(resposta_gemini, 'text')
+            else resposta_gemini.candidates[0].content.parts[0].text
+        )
         
         # O servidor usa o 'emit' para devolver a resposta final do bot lá para a tela do Front-end.
         emit('nova_mensagem', {"remetente": "bot", "texto": resposta_texto, "session_id": session.get('session_id')})
